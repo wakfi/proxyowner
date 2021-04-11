@@ -1,0 +1,12 @@
+{
+    "prefix": "$.",
+    "ownerId": "193160566334947340",
+    "features": {
+        "reactPin": false
+    },
+    "activity": {
+        "args": ["listening","to","$."],
+        "name": "$.",
+        "type": "LISTENING"
+    }
+}
