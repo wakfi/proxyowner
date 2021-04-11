@@ -199,7 +199,7 @@ client.on("message", async message =>
 
 		"removerole": function() {
 			return [
-				['ADMINISTRATOR'],
+				[],
 				['MANAGE_ROLES'],
 				async function() {
 					try
