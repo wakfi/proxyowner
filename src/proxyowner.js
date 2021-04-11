@@ -17,6 +17,9 @@ const recordFile = require(`${process.cwd()}/util/recordFile.js`);
 const parseArgs = require(`${process.cwd()}/util/parseArgs.js`);
 const padZeros = require(`${process.cwd()}/util/padZeros.js`);
 
+const channelRegex = /^<#(\d+)>$/;
+const snowflakeRegex = /^\d+$/;
+
 //this is the file that holds the login info, to keep it seperate from the source code for safety
 client.once("ready", async () =>
 {
@@ -97,29 +100,60 @@ client.on("message", async message =>
 	if(message.author.bot) return;
 
 	if(message.content.indexOf(prefix) !== 0) return;
-	
-	if(command === "ping")
-	{
-		// Calculates ping between sending a message and editing it, giving a nice round-trip latency.
-		// The second ping is an average latency between the bot and the websocket server (one-way, not round-trip)
-		const m = await message.channel.send("Ping?");
-		return m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ws.ping)}ms`);
-	} else if(command === "uptime") {
-		//responds with the current time connected to the discord server in hh:mm:ss format. If hour exceeds 99, will adjust to triple digit, etc
-		let s = client.uptime;
-		let ms = s % 1000;
-		s = (s - ms) / 1000;
-		let secs = s % 60;
-		s = (s - secs) / 60;
-		let mins = s % 60;
-		let hrs = (s - mins) / 60;
-		let p = Math.floor(Math.log10(hrs)) + 1;
-		if(Math.log10(hrs) < 2) p = 2;
-		return message.channel.send("I have been running for " + padZeros(hrs, p) + ':' + padZeros(mins) + ':' + padZeros(secs)).catch(err=>{});
-	}
 
 	// commands from users using prefix go below here
 	let commandLUT = {
+		// command template 1
+		"ctemplate1": function() {
+			return [
+				[],
+				[],
+				async function() {
+
+				}
+			].reverse();
+		},
+
+		// command template 2
+		"ctemplate2": function() {return [async function() {
+			if(message.author.id !== ownerId) return;
+
+			//
+		}]},
+
+		// Calculates ping between sending a message and editing it, giving a nice round-trip latency.
+		// The second ping is an average latency between the bot and the websocket server (one-way, not round-trip)
+		"ping": function() {
+			return [
+				[],
+				[],
+				async function() {
+					const m = await message.channel.send("Ping?");
+					await m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ws.ping)}ms`);
+				}
+			].reverse();
+		},
+
+		//responds with the current time connected to the discord server in hh:mm:ss format. If hour exceeds 99, will adjust to triple digit, etc
+		"uptime": function() {
+			return [
+				[],
+				[],
+				async function() {
+					let s = client.uptime;
+					let ms = s % 1000;
+					s = (s - ms) / 1000;
+					let secs = s % 60;
+					s = (s - secs) / 60;
+					let mins = s % 60;
+					let hrs = (s - mins) / 60;
+					let p = Math.floor(Math.log10(hrs)) + 1;
+					if(Math.log10(hrs) < 2) p = 2;
+					await message.channel.send("I have been running for " + padZeros(hrs, p) + ':' + padZeros(mins) + ':' + padZeros(secs));
+				}
+			].reverse();
+		},
+
 		//Emergency Kill switch, added after channel spam so that i would have a way other than ssh to stop it
 		"kill": function() {
 			return [
@@ -150,6 +184,31 @@ client.on("message", async message =>
 					const fetched = await message.channel.messages.fetch({limit: deleteCount});
 					message.channel.bulkDelete(deleteCount)
 					.catch(error => {console.error(e.stack); message.reply(`Couldn't delete messages because: ${error}`)});
+				}
+			].reverse();
+		},
+
+		// create a webook
+		"createhook": function() {
+			return [
+				['MANAGE_WEBHOOKS'],
+				['MANAGE_WEBHOOKS'],
+				async function() {
+					const pargs = parseArgs(args, {'channel':['c','-channel'], 'name':['n', '-name'], 'avatar':['a', '-avatar'], 'reason':['r', '-reason']});
+					const channelInput = pargs.channel || message.channel.id;
+					const name = pargs.name || pargs.args.join('') || `${client.user.username} Hook (${Date.now()})`;
+					const avatar = pargs.avatar || undefined; // optional, default none
+					const reason = pargs.reason || undefined; // optional, default none
+					const channelId = channelRegex.test(channelInput) ? channelRegex.exec(channelInput)[1] : channelInput;
+					if(!snowflakeRegex.test(channelId) || !message.guild.channels.has(channelId)) return selfDeleteReply(message, `"${channelInput}" could not be resolved to a channel`);
+					const channel = message.guild.channels.get(channelId);
+					try {
+						const hook = await channel.createWebhook(name, avatar, reason);
+						await selfDeleteReply(message, `created webhook \`${hook.name}\` in <#${hook.channelID}>`, `30s`);
+					} catch(e) {
+						console.error(`in createhook:\n\t${e.stack}`)
+						selfDeleteReply(message, `I ran into an error while trying to create the webhook!`);
+					}
 				}
 			].reverse();
 		},
@@ -243,6 +302,19 @@ client.on("message", async message =>
 				console.error(e.stack);
 				await message.reply('an error occurred');
 			}
+		}]},
+
+		// move role position
+		"roleposition": function() {return [async function() {
+			if(message.author.id !== ownerId) return;
+
+			const guild = message.guild;
+			if(!guild) return await message.reply('ur not in a guild rn homeslice');
+			const role = guild.roles.resolve(args[0]);
+			if(!role) return await message.reply(`i dont see a role matching \`${args[0]}\` sry`);
+			let position = Number(args[1]) || -1;
+			if(position === -1) position = guild.roles.highest.position;
+			await role.setPosition(position);
 		}]},
 
 		//only the specified users (the bot owner, usually) can user this, changes the status message
